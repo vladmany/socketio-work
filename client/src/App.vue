@@ -1,20 +1,42 @@
 <template>
-  <img alt="Vue logo" src="./assets/logo.png">
-  <HelloWorld msg="Welcome to Your Vue.js App"/>
+    <login-form v-if="!nickname" @login="enterChat"/>
+    <chat v-if="socket && nickname" :socket="socket" :nickname="nickname" :chat-history="chatHistory"/>
 </template>
 
 <script>
-import HelloWorld from './components/HelloWorld.vue';
+import LoginForm from "@/components/LoginForm";
+import Chat from "@/components/Chat";
 const { io } = require("socket.io-client");
-const socket = io("http://localhost:3000");
-socket.on("msg", (message) => {
-    console.log("[SERVER]: ", message);
-});
+
 export default {
-  name: 'App',
-  components: {
-    HelloWorld
-  }
+    name: 'App',
+	components: {
+		LoginForm,
+        Chat
+	},
+    data() {
+		return {
+	        nickname: null,
+            socket: null,
+            chatHistory: null,
+        }
+    },
+    methods: {
+		enterChat(nickname) {
+			this.socket = io("http://localhost:3000", {
+				query: {
+					nickname,
+                }
+            });
+
+			this.socket.on('connect', () => {
+				this.nickname = nickname;
+				this.socket.on('connected', (args) => {
+					this.chatHistory = args.chatHistory;
+                })
+            });
+        }
+    }
 }
 </script>
 
