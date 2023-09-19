@@ -23,11 +23,15 @@ io.on("connection", (socket) => {
 		sendMessage(args.from, args.text);
 	});
 
-	function sendMessage(from, text) {
-		chatHistory.push({from, text});
-		io.emit('message', {from, text});
-	}
+	socket.on('disconnect', (args) => {
+		sendMessage("SERVER", `${socket.handshake.query.nickname} покинул чат`);
+	})
 });
+
+function sendMessage(from, text) {
+	chatHistory.push({from, text});
+	io.emit('message', {from, text});
+}
 
 setTimeout(() => io.emit('msg', 'Welcome to the my server!'), 3000)
 
