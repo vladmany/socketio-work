@@ -1,11 +1,8 @@
 <template>
   <div style="display: flex">
     <strong>Каналы:</strong>
-    <div style="width: 300px; display: flex; flex-direction: row; justify-content: space-around">
-      <button @click.prevent="changeChannel('general')">general</button>
-      <button @click.prevent="changeChannel('music')">music</button>
-      <button @click.prevent="changeChannel('cinema')">cinema</button>
-      <button @click.prevent="changeChannel('games')">games</button>
+    <div style="width: 350px; display: flex; flex-direction: row; justify-content: space-around">
+      <button v-for="channel in channels" @click.prevent="changeChannel(channel)">{{channel}} ({{online[channel] ?? 0}})</button>
     </div>
   </div>
 </template>
@@ -16,7 +13,13 @@ export default {
   props: ['socket'],
   data() {
     return {
-
+		channels: [
+			'general',
+            'music',
+            'cinema',
+            'games',
+        ],
+        online: {},
     }
   },
   methods: {
@@ -24,7 +27,16 @@ export default {
       this.socket.emit('change-channel', {channel});
       this.$emit('change-channel', channel);
     }
-  }
+  },
+    created() {
+		this.socket.on('update-online', (data) => {
+			this.online = data;
+		});
+
+		this.socket.on('private-chat-accept', (roomName) => {
+			this.channels.push(roomName);
+        });
+	}
 }
 </script>
 
