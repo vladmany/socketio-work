@@ -1,24 +1,28 @@
 <template>
+  <channels :socket="socket" @change-channel="activeChannel = $event"/>
     <div style="border: 1px solid black; padding: 5px; text-align: left; height: 500px; overflow-x: clip; overflow-y: scroll;">
         <ul style="list-style: none; margin: 0; padding: 0; position: relative; bottom: 0;">
             <li :style="message.from === 'SERVER' ? 'color: #5f5fc5' : ''" v-for="message in chatMessages"><strong>[{{message.from}}]:</strong> {{message.text}}</li>
         </ul>
     </div>
     <form @submit.prevent="sendMessage" style="text-align: left; margin-top: 5px;">
-        <span>{{nickname}}: </span>
+        <span>[{{activeChannel}}] {{nickname}}: </span>
         <input v-model="message" type="text" style="width: 25%; margin-right: 5px">
         <button>Отправить</button>
     </form>
 </template>
 
 <script>
+import Channels from "@/components/Channels";
 export default {
 	name: "Chat",
-    props: ['socket', 'nickname', 'chatHistory'],
+  components: {Channels},
+  props: ['socket', 'nickname', 'chatHistory'],
     data() {
 		return {
 			chatMessages: [],
             message: '',
+      activeChannel: 'general',
         }
     },
     methods: {

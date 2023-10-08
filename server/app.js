@@ -16,21 +16,33 @@ const chatHistory = [
 
 ];
 io.on("connection", (socket) => {
+	moveToChannel(socket, 'general');
 	sendMessage('SERVER', `Поприветствуем нового участника чата - ${socket.handshake.query.nickname}`);
 	socket.emit('connected', {chatHistory});
 
 	socket.on('message', (args) => {
-		sendMessage(args.from, args.text);
+		const channel = [...socket.rooms][0];
+
+		sendMessage(args.from, args.text, channel);
 	});
 
-	socket.on('disconnect', (args) => {
+	socket.on('disconnect', () => {
 		sendMessage("SERVER", `${socket.handshake.query.nickname} покинул чат`);
+	})
+
+	socket.on('change-channel', (args) => {
+		moveToChannel(socket, args.channel);
 	})
 });
 
-function sendMessage(from, text) {
+function moveToChannel(socket, channel) {
+	socket.leaveAll();
+	socket.join(channel)
+}
+
+function sendMessage(from, text, channel = 'general') {
 	chatHistory.push({from, text});
-	io.emit('message', {from, text});
+	io.to(channel).emit('message', {from, text});
 }
 
 setTimeout(() => io.emit('msg', 'Welcome to the my server!'), 3000)
