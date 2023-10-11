@@ -12,7 +12,7 @@ export default {
         }
     },
     created() {
-		this.socket.on('update-online', (data) => {
+		this.socket.on('set-online', (data) => {
 			this.online = data['all'];
         });
     }

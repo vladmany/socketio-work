@@ -1,14 +1,29 @@
+require('dotenv').config({});
+
 const express = require("express");
+const routes = require('./routes');
 const { createServer } = require("http");
 const { Server } = require("socket.io");
+const { init, Room} = require('./models/init');
+const cors = require('cors');
+const jwt = require("jsonwebtoken");
+const roomService = require("./services/RoomService");
+const chatMessageService = require("./services/ChatMessageService");
+const { JWT_SECRET } = process.env;
+const DEFAULT_ROOM_ID = 1;
 
 const app = express();
+app.use(express.json());
+app.use(cors());
+app.use(routes);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
 	cors: {
 		origin: "http://localhost:8080",
 	}
 });
+
+app.listen(3001, async () => await init());
 
 const sendOnlineTimer = setInterval(() => {
 	if (!io)
@@ -21,60 +36,63 @@ const sendOnlineTimer = setInterval(() => {
 		result[room] = sockets.size;
 	});
 
-	io.emit('update-online', result);
-}, 5000);
+	io.emit('set-online', result);
+}, 1000);
 
-const chatHistory = [
-	{from: 'user111', text: 'Привет, чаттеры!!'},
-	{from: 'vitalik228', text: 'ну привет'},
+io.on("connection", async (socket) => {
+	const token = socket.handshake.query.token;
+	if (!token)
+		socket.disconnect();
+	socket.data = jwt.verify(token, JWT_SECRET);
 
-];
-io.on("connection", (socket) => {
-	moveToChannel(socket, 'general');
-	sendMessage('SERVER', `Поприветствуем нового участника чата - ${socket.handshake.query.nickname}`);
-	socket.emit('connected', {chatHistory});
+	let rooms = await roomService.getRooms(socket.data.id);
+	await moveToRoom(socket, DEFAULT_ROOM_ID);
+	socket.emit('set-rooms', rooms);
 
-	socket.on('message', (args) => {
-		const channel = [...socket.rooms][0];
+	const roomHistory = await chatMessageService.getMessages(DEFAULT_ROOM_ID);
+	socket.emit('set-history', roomHistory);
 
-		sendMessage(args.from, args.text, channel);
+	socket.on('message', (message) => {
+		const room = [...socket.rooms][0];
+
+		sendMessage(message.text, socket.data.id, room);
 	});
 
-	socket.on('disconnect', () => {
-		sendMessage("SERVER", `${socket.handshake.query.nickname} покинул чат`);
+	socket.on('join-room', async (room) => {
+		await moveToRoom(socket, room);
+		const history = await chatMessageService.getMessages(room);
+		socket.emit('set-history', history);
 	});
 
-	io.sockets.adapter.on('join-room', (room, socketId) => io.sockets.sockets.get(socketId).emit('join-channel', room));
-
-	socket.on('change-channel', (args) => {
-		moveToChannel(socket, args.channel);
-	});
-
-	socket.on('private-chat-request', (nickname) => {
-		io.sockets.sockets.forEach((userSocket) => {
-			const userNickname = userSocket.handshake.query.nickname;
-			if (userNickname === nickname) {
-				const selfNickname = socket.handshake.query.nickname;
-				const roomName = `${selfNickname} & ${userNickname}`;
-				moveToChannel(socket, roomName);
-				moveToChannel(userSocket, roomName);
-				socket.emit('private-chat-accept', roomName);
-				userSocket.emit('private-chat-accept', roomName);
+	socket.on('private-chat-request', (userId) => {
+		io.sockets.sockets.forEach(async (userSocket) => {
+			const userData = userSocket.data;
+			if (userData.id === userId) {
+				const selfData = socket.data;
+				const roomName = `${selfData.username} & ${userData.username}`;
+				const privateRoom = await roomService.createRoom(roomName, true, selfData.id, userData.id);
+				moveToRoom(socket, privateRoom.id);
+				moveToRoom(userSocket, privateRoom.id);
+				socket.emit('private-chat-accept', privateRoom);
+				socket.emit('set-history', []);
+				userSocket.emit('private-chat-accept', privateRoom);
+				userSocket.emit('set-history', []);
 			}
 		})
 	});
+
 });
 
-function moveToChannel(socket, channel) {
+async function moveToRoom(socket, room) {
 	socket.leaveAll();
-	socket.join(channel)
+	socket.join(room);
+	socket.emit('joined-room', await Room.findByPk(room));
 }
 
-function sendMessage(from, text, channel = 'general') {
-	chatHistory.push({from, text});
-	io.to(channel).emit('message', {from, text});
+async function sendMessage(text, from = null, roomId = DEFAULT_ROOM_ID)
+{
+	const message = await chatMessageService.createMessage(text, from, roomId);
+	io.to(roomId).emit('message', {message});
 }
-
-setTimeout(() => io.emit('msg', 'Welcome to the my server!'), 3000)
 
 httpServer.listen(3000);
